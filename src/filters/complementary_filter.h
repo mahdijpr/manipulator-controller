@@ -1,27 +1,24 @@
 #pragma once
 
-class ComplementaryFilter
+#include "common/types.h"
+
+class OrientationEstimator
 {
 public:
-    explicit ComplementaryFilter(float timeConstantSeconds);
+    OrientationEstimator(float timeConstantSeconds, float maximumDtSeconds);
 
     void reset();
-    void initialize(float rollDeg, float pitchDeg);
-    void update(
-        float accelRollDeg,
-        float accelPitchDeg,
-        float gyroXDegS,
-        float gyroYDegS,
+    bool update(
+        const IMUCalibratedMeasurements& measurements,
         float dtSeconds
     );
 
     bool isInitialized() const;
-    float getRollDeg() const;
-    float getPitchDeg() const;
+    bool isValid() const;
+    const OrientationEstimate& getOutput() const;
 
 private:
     float timeConstantSeconds_;
-    float rollDeg_ = 0.0f;
-    float pitchDeg_ = 0.0f;
-    bool initialized_ = false;
+    float maximumDtSeconds_;
+    OrientationEstimate output_;
 };

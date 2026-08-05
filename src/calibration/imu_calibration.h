@@ -8,16 +8,16 @@ public:
 
     bool begin();
 
-    bool update(const IMUData& input);
+    bool update(const IMURawMeasurements& input);
 
-    const IMUData& getData() const;
+    const IMUCalibratedMeasurements& getData() const;
 
     bool isCalibrated() const;
 
 
 private:
 
-    IMUData data_;
+    IMUCalibratedMeasurements data_;
 
     bool calibrated_ = false;
 
@@ -27,17 +27,9 @@ private:
     uint16_t sampleCounter_ = 0;
 
 
-    float rollSum_ = 0.0f;
-    float pitchSum_ = 0.0f;
-
-
     float gxSum_ = 0.0f;
     float gySum_ = 0.0f;
     float gzSum_ = 0.0f;
-
-
-    float rollOffset_ = 0.0f;
-    float pitchOffset_ = 0.0f;
 
 
     float gxOffset_ = 0.0f;

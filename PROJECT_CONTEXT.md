@@ -20,13 +20,16 @@ The PlatformIO dependency is the Arduino ICM42688 library at `https://github.com
 ## Completed Priority 1 Behavior
 
 - `Application` schedules one IMU update per due period. When late, it advances to the next future absolute deadline and does not make catch-up bursts.
-- `ICM42688Driver` obtains a sample, records a 64-bit microsecond timestamp, retains raw counts, filters gyro values, and calculates accelerometer-based roll and pitch.
-- `IMUCalibration` accepts 50 valid warm-up samples, then averages 500 valid calibration samples. Failed reads do not advance either counter. With uninterrupted valid reads, valid sample 550 is the first calibrated row.
-- Diagnostics are compile-time controlled. The current default (`IMU_DIAGNOSTICS_ENABLED=1`) enables them; setting the macro to `0` removes them from the update path. When enabled, diagnostics emits one header after successful initialization and one 15-column row for each valid update.
+- `ICM42688Driver` obtains a sample, records a 64-bit microsecond timestamp, retains raw counts, and converts measurements to g and dps. It performs neither filtering nor angle calculation.
+- `IMUCalibration` accepts 50 valid warm-up samples, then averages 500 valid gyro samples and subtracts the stationary gyro bias. It preserves the accelerometer gravity vector because an arbitrary stationary pose cannot provide a valid three-axis accelerometer bias estimate. Failed reads do not advance either counter. With uninterrupted valid reads, valid sample 550 is the first calibrated row.
+- `OrientationEstimator` runs after calibration. It calculates accelerometer-only and complementary-fused gravity-referenced Roll/Pitch independently, initializes from the accelerometer angle, and rejects zero, negative, non-finite, or over-0.1-second `dt` values.
+- Diagnostics are compile-time controlled. The current default (`IMU_DIAGNOSTICS_ENABLED=1`) enables them; setting the macro to `0` removes them from the update path. When enabled, diagnostics emits one header after successful initialization and one 23-column row for each valid update.
 
 ```text
 timestamp_us, dt_s, raw_ax, raw_ay, raw_az, raw_gx, raw_gy, raw_gz,
-roll_deg, pitch_deg, gx_dps, gy_dps, gz_dps, calibrated, valid
+cal_ax_g, cal_ay_g, cal_az_g, cal_gx_dps, cal_gy_dps, cal_gz_dps,
+accel_roll_deg, accel_pitch_deg, fused_roll_deg, fused_pitch_deg,
+calibrated, raw_valid, calibrated_valid, estimator_initialized, estimator_valid
 ```
 
 ## Priority 1 Validation
@@ -46,15 +49,13 @@ The large `raw_gz` excursions seen in earlier motion testing did not occur in an
 
 Motion tests retained stable 50 Hz timing, captured positive and negative roll and pitch movement, and showed return to the initial position within approximately 0.08° roll and 0.10° pitch. Slow-motion axis separation was acceptable. The earlier large `raw_gz` values may have come from fast motion, impact, Z-axis rotation, or cable movement; the cause was not proven.
 
-## Current Limitations and Priority 2
+## Current Limitations
 
-Roll and pitch are accelerometer-only estimates:
+Accelerometer-only Roll/Pitch are gravity-referenced estimates:
 
 ```text
 roll  = atan2(ay, az)
 pitch = atan2(-ax, sqrt(ay² + az²))
 ```
 
-They are appropriate for stationary conditions and slow movement, but linear acceleration and fast motion can look like tilt. Gyroscope measurements are low-pass filtered and calibrated but are not fused into the angles. Therefore the current angles are not suitable for direct use in a moving-axis control loop.
-
-Priority 2 is the implementation and validation of dynamic angle estimation and sensor fusion. The proposed next step is a complementary filter using the existing ICM42688. Migration to a BNO085/BNO086 remains an open future design decision, not a current commitment.
+They are appropriate for stationary conditions and slow movement, but linear acceleration and fast motion can look like tilt. Complementary-fused Roll/Pitch reduce that limitation by integrating calibrated gyro X/Y rates, but they still have no yaw estimate and require hardware validation before control-loop use. Startup-relative or user-zeroed coordinates must be a separate post-estimator reference-offset layer. Migration to a BNO085/BNO086 remains an open future design decision.

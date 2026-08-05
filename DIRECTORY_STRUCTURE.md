@@ -18,7 +18,7 @@ Manipulator Controller/
 ├── lib/
 │   └── README                     # PlatformIO private-library placeholder
 ├── test/
-│   ├── host_imu_validation.cpp    # Host checks for calibration and deadline behavior
+│   ├── host_imu_validation.cpp    # Host checks for scheduling, calibration, and orientation estimation
 │   └── README
 └── src/
     ├── main.cpp
@@ -44,6 +44,8 @@ Manipulator Controller/
     │       ├── imu_driver.h
     │       └── imu_interface.h
     ├── filters/
+    │   ├── complementary_filter.cpp
+    │   ├── complementary_filter.h
     │   ├── low_pass_filter.cpp
     │   └── low_pass_filter.h
     ├── platform/
@@ -64,16 +66,16 @@ Manipulator Controller/
 | --- | --- |
 | `src/main.cpp` | Arduino entry points; starts serial and delegates to the global `Application`. |
 | `src/app/` | Application scheduling and orchestration. `periodic_deadline.h` advances absolute microsecond deadlines to the first future period. |
-| `src/sensors/` | `IMUManager` owns the concrete ICM42688 driver and `IMUCalibration`, and exposes final `IMUData`. |
+| `src/sensors/` | `IMUManager` owns the concrete ICM42688 driver, `IMUCalibration`, and `OrientationEstimator`, and exposes staged `IMUData`. |
 | `src/drivers/imu/` | ICM42688-specific I2C driver plus `IIMUDriver`. The interface exists, but the manager currently owns the concrete driver. |
-| `src/filters/` | First-order `LowPassFilter`; three instances filter gyro axes inside the driver before calibration. |
-| `src/calibration/` | Startup warm-up and averaging offsets for roll, pitch, and filtered gyro axes. |
+| `src/filters/` | `OrientationEstimator` implements gravity-referenced accelerometer angles and complementary Roll/Pitch fusion. `LowPassFilter` remains unused by the Priority 2 IMU pipeline. |
+| `src/calibration/` | Startup warm-up and averaging offsets for stationary gyro axes. Accelerometer values are preserved when startup orientation is unknown. |
 | `src/diagnostics/` | Compile-time-controlled CSV diagnostics emitted after a successful manager update. |
 | `src/common/` | Shared configuration constants and `IMUData`; `math_utils.h` is empty. |
 | `src/platform/` | Arduino/ESP32 timing wrappers. `esp32/` and `stm32/` are empty and contain no platform implementations. |
 | `src/control/` | Empty placeholder; no control, PID/PD, motor, actuator, or joint implementation. |
 | `src/communication/` | Empty placeholder; no transport or protocol implementation. |
-| `test/` | Host-side checks for deadline progression and calibration counter behavior. |
+| `test/` | Host-side checks for deadline progression, calibration counter behavior, and orientation estimation. |
 | `analyze_imu.py` | Reads captured diagnostic text/CSV, reports timing and IMU statistics, and optionally generates plots. |
 
 ## Active Ownership Path
@@ -82,9 +84,9 @@ Manipulator Controller/
 Application
   ├── IMUManager
   │   ├── ICM42688Driver : IIMUDriver
-  │   │   └── LowPassFilter x3
   │   └── IMUCalibration
+  │   └── OrientationEstimator
   └── Diagnostics (called only when compile-time enabled)
 ```
 
-The folder names reserve future areas but do not imply that control, communication, ESP32 abstraction, STM32 support, or sensor fusion is implemented.
+The folder names reserve future areas but do not imply that control, communication, ESP32 abstraction, or STM32 support is implemented.

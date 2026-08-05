@@ -3,7 +3,10 @@
 #include "common/config.h"
 
 IMUManager::IMUManager()
-    : attitudeFilter_(IMU_COMPLEMENTARY_FILTER_TIME_CONSTANT_S)
+    : orientationEstimator_(
+          IMU_COMPLEMENTARY_FILTER_TIME_CONSTANT_S,
+          IMU_ORIENTATION_ESTIMATOR_MAX_DT_S
+      )
 {
 }
 
@@ -13,7 +16,8 @@ bool IMUManager::begin()
         return false;
 
     calibration_.begin();
-    attitudeFilter_.reset();
+    orientationEstimator_.reset();
+    data_ = IMUData{};
 
     return true;
 }
@@ -23,32 +27,20 @@ bool IMUManager::update()
     if (!driver_.update())
         return false;
 
-    calibration_.update(driver_.getData());
-    data_ = calibration_.getData();
+    if (!calibration_.update(driver_.getData()))
+        return false;
 
-    // Startup calibration establishes the accelerometer-angle and gyro-rate
-    // zero references. Begin fusion from the first calibrated angle so the
-    // filter cannot integrate uncalibrated gyro bias during startup.
-    if (data_.calibrated)
+    data_.raw = driver_.getData();
+    data_.calibrated = calibration_.getData();
+
+    // Only calibrated measurements enter the estimator. The first such sample
+    // initializes fused Roll/Pitch from gravity-referenced accelerometer angles.
+    if (data_.calibrated.calibrationComplete)
     {
-        if (!attitudeFilter_.isInitialized())
-        {
-            attitudeFilter_.initialize(data_.rollDeg, data_.pitchDeg);
-        }
-        else
-        {
-            attitudeFilter_.update(
-                data_.rollDeg,
-                data_.pitchDeg,
-                data_.gyroXDegS,
-                data_.gyroYDegS,
-                data_.dtSeconds
-            );
-        }
-
-        data_.rollDeg = attitudeFilter_.getRollDeg();
-        data_.pitchDeg = attitudeFilter_.getPitchDeg();
+        orientationEstimator_.update(data_.calibrated, data_.raw.dtSeconds);
     }
+
+    data_.orientation = orientationEstimator_.getOutput();
 
     return true;
 }

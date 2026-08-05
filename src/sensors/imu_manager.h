@@ -17,6 +17,6 @@ public:
 private:
     ICM42688Driver driver_;
     IMUCalibration calibration_;
-    ComplementaryFilter attitudeFilter_;
+    OrientationEstimator orientationEstimator_;
     IMUData data_;
 };

@@ -12,5 +12,5 @@ public:
 
     virtual bool update() = 0;
 
-    virtual const IMUData& getData() const = 0;
+    virtual const IMURawMeasurements& getData() const = 0;
 };
