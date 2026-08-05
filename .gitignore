@@ -31,6 +31,12 @@ imu_50hz_test_clean.csv
 imu_50hz_test.csv
 imu_log.csv
 
+# Generated IMU test recordings and alternate analysis directories
+imu_*_test*.csv
+imu_*_test*.txt
+imu_*_clean.csv
+imu_analysis_*/
+
 # Temporary files
 *.tmp
 *.bak
