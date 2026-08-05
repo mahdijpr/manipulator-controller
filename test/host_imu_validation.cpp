@@ -1,5 +1,6 @@
 // Host-side checks: compile and run with
-// g++ -std=c++17 -Isrc test/host_imu_validation.cpp //     src/calibration/imu_calibration.cpp src/filters/complementary_filter.cpp
+// g++ -std=c++17 -Isrc test/host_imu_validation.cpp
+//     src/calibration/imu_calibration.cpp src/filters/complementary_filter.cpp
 #include <assert.h>
 #include <math.h>
 
