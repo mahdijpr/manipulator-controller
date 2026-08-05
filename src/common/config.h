@@ -16,8 +16,14 @@ constexpr uint32_t IMU_SAMPLE_PERIOD_US = 20000U;
 constexpr uint16_t IMU_CALIBRATION_WARMUP_SAMPLES = 50U;
 constexpr uint16_t IMU_CALIBRATION_SAMPLE_COUNT = 500U;
 
+// Complementary-filter time constant. At the nominal 50 Hz application rate,
+// this gives alpha = 0.5 / (0.5 + 0.02) = 0.9615.
+constexpr float IMU_COMPLEMENTARY_FILTER_TIME_CONSTANT_S = 0.5f;
+
 static_assert(IMU_SAMPLE_PERIOD_US > 0U, "IMU sample period must be non-zero");
 static_assert(IMU_CALIBRATION_SAMPLE_COUNT > 0U, "IMU calibration requires at least one sample");
+static_assert(IMU_COMPLEMENTARY_FILTER_TIME_CONSTANT_S > 0.0f,
+              "Complementary-filter time constant must be positive");
 // I2C
 constexpr uint8_t IMU_SDA_PIN = 12;
 constexpr uint8_t IMU_SCL_PIN = 13;
