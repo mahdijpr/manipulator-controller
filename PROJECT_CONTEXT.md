@@ -1,88 +1,60 @@
 # Project Context
 
-## Overview
+## Status — Priority 1 Complete (2026-08-05)
 
-This is an **ESP32-S3 based IMU acquisition and processing prototype for a future manipulator controller**. It is not yet a completed motion controller.
+This is an ESP32-S3 IMU-processing prototype for a future manipulator controller, not a complete motion controller. Priority 1—reliable IMU acquisition, startup calibration, diagnostics, and timing validation—is complete. The firmware has no actuator, encoder, kinematics, trajectory, PID/PD/ADRC, yaw-estimation, or communication implementation.
 
-The current firmware brings up one ICM42688 IMU, acquires measurements, applies a gyro low-pass filter, derives roll and pitch from the accelerometer, and performs startup offset calibration. The resulting data is available to the application layer but is not yet used to control hardware.
+## Current Hardware and Build
 
-## Current Status
-
-Implemented now:
-
-- ESP32-S3 DevKitC-1 PlatformIO/Arduino project setup.
-- ICM42688 initialization and I2C communication.
-- Raw accelerometer and gyroscope capture.
-- Library-provided acceleration values in g and gyroscope values in dps.
-- First-order low-pass filtering of the three gyro axes.
-- Accelerometer-derived roll and pitch calculations.
-- Microsecond acquisition timestamp and elapsed-time (`dt`) capture.
-- Startup averaging calibration for roll, pitch, and filtered gyro offsets.
-- Compile-time controlled, standardized CSV diagnostics and an offline Python log-analysis script.
-
-Not active or not implemented now:
-
-- Motor/servo drivers, encoders, kinematics, trajectory generation, or joint control.
-- PID, ADRC, sensor fusion, yaw estimation, or communication protocols.
-- Persistent calibration, calibration validation, runtime recovery, or STM32 support.
-
-## Current Hardware and Build Environment
-
-| Item | Current implementation |
+| Item | Verified implementation |
 | --- | --- |
-| MCU / board | ESP32-S3 DevKitC-1 |
-| Build system | PlatformIO |
-| Framework | Arduino |
-| Language mode | GNU C++17 |
-| Serial speed | 921600 baud |
-| IMU | ICM42688 |
-| IMU bus | I2C, 400 kHz |
-| IMU address | `0x68` |
-| I2C pins | SDA GPIO 12, SCL GPIO 13 |
+| Board / framework | ESP32-S3 DevKitC-1, PlatformIO, Arduino, GNU C++17 |
+| Serial monitor / upload speed | 921600 baud |
+| IMU | ICM42688 on I2C address `0x68` |
+| I2C bus | SDA GPIO 12, SCL GPIO 13, `400 kHz` |
+| Sensor setup | Accelerometer ±4 g at 100 Hz; gyroscope ±250 dps at 100 Hz |
+| Application schedule | Absolute `20000 us` deadlines (50 Hz) using 64-bit microsecond timestamps |
 
-The declared third-party firmware dependency is the `finani/ICM42688` GitHub library. Its URL is currently unpinned, so a fresh dependency resolution can change over time.
+The PlatformIO dependency is the Arduino ICM42688 library at `https://github.com/finani/ICM42688`; the URL is not pinned. The current firmware also depends directly on Arduino `Serial`, `Wire`, and delay APIs, plus ESP32 `esp_timer`, so it is not hardware-independent or readily portable to STM32 as-is.
 
-## Current Sensor Configuration
+## Completed Priority 1 Behavior
 
-| Sensor channel | Full-scale range | Configured ODR |
-| --- | --- | --- |
-| Accelerometer | +/-4 g | 100 Hz |
-| Gyroscope | +/-250 dps | 100 Hz |
-
-The application schedules IMU acquisition at 50 Hz with `IMU_SAMPLE_PERIOD_US = 20,000`. It uses the ESP32's 64-bit monotonic microsecond time, retains an absolute deadline sequence, and yields only while waiting before a deadline. It does not apply a fixed delay after acquisition and processing. When late, it performs one acquisition attempt and advances the deadline by whole periods to a future deadline, without catch-up bursts. Physical-board capture is still needed to measure the achieved rate and jitter.
-
-## Current Software Architecture
+- `Application` schedules one IMU update per due period. When late, it advances to the next future absolute deadline and does not make catch-up bursts.
+- `ICM42688Driver` obtains a sample, records a 64-bit microsecond timestamp, retains raw counts, filters gyro values, and calculates accelerometer-based roll and pitch.
+- `IMUCalibration` accepts 50 valid warm-up samples, then averages 500 valid calibration samples. Failed reads do not advance either counter. With uninterrupted valid reads, valid sample 550 is the first calibrated row.
+- Diagnostics are compile-time controlled. The current default (`IMU_DIAGNOSTICS_ENABLED=1`) enables them; setting the macro to `0` removes them from the update path. When enabled, diagnostics emits one header after successful initialization and one 15-column row for each valid update.
 
 ```text
-main.cpp
-  -> Application
-      -> IMUManager
-          -> ICM42688Driver
-              -> Arduino Wire + ICM42688 library + I2C hardware
-              -> three gyro LowPassFilter instances
-          -> IMUCalibration
-      -> Diagnostics (passively observes final IMUManager data when enabled)
+timestamp_us, dt_s, raw_ax, raw_ay, raw_az, raw_gx, raw_gy, raw_gz,
+roll_deg, pitch_deg, gx_dps, gy_dps, gz_dps, calibrated, valid
 ```
 
-At runtime, the driver reads the sensor, timestamps the acquired sample in microseconds, stores raw and converted values, filters gyro values, and calculates roll/pitch. `IMUManager` then passes that data through `IMUCalibration` and returns the corrected data to `Application`, which emits one CSV row through `Diagnostics` for each successful update when diagnostics are enabled.
+## Priority 1 Validation
 
-`IIMUDriver` is implemented by `ICM42688Driver`, but `IMUManager` currently owns the concrete driver type. The interface is therefore present but is not yet the active substitution boundary.
+| Validation | Result |
+| --- | --- |
+| Long timing capture | More than 31,000 samples across approximately 622.58 s |
+| Sampling rate | 50.000 Hz |
+| Timing jitter | Approximately 9 µs |
+| Timing integrity | Zero timing gaps, duplicate/non-increasing timestamps, and estimated missing samples |
+| Three stationary post-calibration tests | 50.000 Hz in every test; approximately 7–10 µs jitter; no gaps, duplicate timestamps, or missing samples |
+| Stationary orientation stability | Roll standard deviation approximately 0.029°, pitch standard deviation approximately 0.032° |
+| Stationary Z gyro observations | `raw_gz` peak-to-peak ranges approximately 22, 23, and 24 counts; `gz_dps` standard deviation approximately 0.0054–0.0060 dps |
+| Drift | Negligible and within the measured noise level |
 
-## Current Limitations
+The large `raw_gz` excursions seen in earlier motion testing did not occur in any stationary test. There is no evidence of a persistent sensor or I2C failure, so no outlier detector has been added; a simple detector could reject legitimate fast motion.
 
-- Startup calibration assumes the IMU is stationary for the 50 successful warm-up samples (about one second at 50 Hz) plus 500 successful calibration samples; this is not checked in code. Warm-up samples run filtering and appear as valid, uncalibrated CSV rows but do not contribute to offsets. With no failed reads, the first calibrated CSV row is valid row 550 (one-based). Failed reads advance neither counter.
-- Only gyro data is filtered. Roll and pitch come directly from accelerometer data; no yaw or sensor fusion exists.
-- An initialization failure blocks indefinitely. Runtime read failures produce no CSV row and have no recovery action.
-- Arduino APIs are used in several modules, so the present code is not yet hardware independent.
+Motion tests retained stable 50 Hz timing, captured positive and negative roll and pitch movement, and showed return to the initial position within approximately 0.08° roll and 0.10° pitch. Slow-motion axis separation was acceptable. The earlier large `raw_gz` values may have come from fast motion, impact, Z-axis rotation, or cable movement; the cause was not proven.
 
-## Future Roadmap
+## Current Limitations and Priority 2
 
-The following are **future work**, not current capabilities:
+Roll and pitch are accelerometer-only estimates:
 
-- Build the manipulator controller: actuator drivers, encoders, joint control, and trajectory handling.
-- Add control algorithms such as PID and ADRC.
-- Add sensor fusion and stable orientation estimation.
-- Add communication interfaces such as CAN, UART, USB, telemetry, or an external-controller interface.
-- Introduce complete platform abstractions and migrate the firmware to STM32.
+```text
+roll  = atan2(ay, az)
+pitch = atan2(-ax, sqrt(ay² + az²))
+```
 
-The current module separation, IMU data type, and `IIMUDriver` interface are useful foundations for that work, but STM32 migration will require changes to timing, serial output, I2C access, the sensor dependency, and the build configuration.
+They are appropriate for stationary conditions and slow movement, but linear acceleration and fast motion can look like tilt. Gyroscope measurements are low-pass filtered and calibrated but are not fused into the angles. Therefore the current angles are not suitable for direct use in a moving-axis control loop.
+
+Priority 2 is the implementation and validation of dynamic angle estimation and sensor fusion. The proposed next step is a complementary filter using the existing ICM42688. Migration to a BNO085/BNO086 remains an open future design decision, not a current commitment.

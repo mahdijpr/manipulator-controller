@@ -1,128 +1,90 @@
 # Project Directory Structure
 
-## Current Repository Structure
+## Verified Workspace Layout
 
 ```text
-src/
-├── main.cpp
-├── app/
-│   ├── application.cpp
-│   └── application.h
-├── calibration/
-│   ├── imu_calibration.cpp
-│   └── imu_calibration.h
-├── common/
-│   ├── config.h
-│   ├── math_utils.h              # empty placeholder
-│   └── types.h
-├── communication/                # empty placeholder
-├── control/                      # empty placeholder
-├── diagnostics/
-│   ├── diagnostics.cpp
-│   └── diagnostics.h
-├── drivers/
-│   └── imu/
-│       ├── imu_driver.cpp
-│       ├── imu_driver.h
-│       └── imu_interface.h
-├── filters/
-│   ├── low_pass_filter.cpp
-│   └── low_pass_filter.h
-├── platform/
-│   ├── esp32/                    # empty placeholder
-│   ├── stm32/                    # empty placeholder
-│   ├── platform_time.cpp
-│   └── platform_time.h
-└── sensors/
-    ├── imu_manager.cpp
-    └── imu_manager.h
+Manipulator Controller/
+├── .vscode/                       # Editor configuration
+├── .pio/                          # PlatformIO-generated build data
+├── platformio.ini                 # ESP32-S3 / Arduino PlatformIO environment
+├── analyze_imu.py                 # Offline serial-log parser, report, and plotting tool
+├── PROJECT_CONTEXT.md
+├── DIRECTORY_STRUCTURE.md
+├── DESIGN.md
+├── imu_*.csv / imu_*.txt          # Captured and cleaned validation data/reports
+├── imu_analysis/                  # Generated analysis report and plots
+├── include/
+│   └── README                     # PlatformIO include-directory placeholder
+├── lib/
+│   └── README                     # PlatformIO private-library placeholder
+├── test/
+│   ├── host_imu_validation.cpp    # Host checks for calibration and deadline behavior
+│   └── README
+└── src/
+    ├── main.cpp
+    ├── app/
+    │   ├── application.cpp
+    │   ├── application.h
+    │   └── periodic_deadline.h
+    ├── calibration/
+    │   ├── imu_calibration.cpp
+    │   └── imu_calibration.h
+    ├── common/
+    │   ├── config.h
+    │   ├── math_utils.h            # Empty placeholder
+    │   └── types.h
+    ├── communication/              # Empty placeholder
+    ├── control/                    # Empty placeholder
+    ├── diagnostics/
+    │   ├── diagnostics.cpp
+    │   └── diagnostics.h
+    ├── drivers/
+    │   └── imu/
+    │       ├── imu_driver.cpp
+    │       ├── imu_driver.h
+    │       └── imu_interface.h
+    ├── filters/
+    │   ├── low_pass_filter.cpp
+    │   └── low_pass_filter.h
+    ├── platform/
+    │   ├── esp32/                  # Empty placeholder
+    │   ├── stm32/                  # Empty placeholder
+    │   ├── platform_time.cpp
+    │   └── platform_time.h
+    └── sensors/
+        ├── imu_manager.cpp
+        └── imu_manager.h
 ```
 
-`src/app/` is the current application directory. There is no `src/application/` directory.
+`src/app/` is the actual application directory; there is no `src/application/` directory.
 
-## Current Module Responsibilities
+## Current Responsibilities
 
-### `main.cpp`
+| Path | Current responsibility and status |
+| --- | --- |
+| `src/main.cpp` | Arduino entry points; starts serial and delegates to the global `Application`. |
+| `src/app/` | Application scheduling and orchestration. `periodic_deadline.h` advances absolute microsecond deadlines to the first future period. |
+| `src/sensors/` | `IMUManager` owns the concrete ICM42688 driver and `IMUCalibration`, and exposes final `IMUData`. |
+| `src/drivers/imu/` | ICM42688-specific I2C driver plus `IIMUDriver`. The interface exists, but the manager currently owns the concrete driver. |
+| `src/filters/` | First-order `LowPassFilter`; three instances filter gyro axes inside the driver before calibration. |
+| `src/calibration/` | Startup warm-up and averaging offsets for roll, pitch, and filtered gyro axes. |
+| `src/diagnostics/` | Compile-time-controlled CSV diagnostics emitted after a successful manager update. |
+| `src/common/` | Shared configuration constants and `IMUData`; `math_utils.h` is empty. |
+| `src/platform/` | Arduino/ESP32 timing wrappers. `esp32/` and `stm32/` are empty and contain no platform implementations. |
+| `src/control/` | Empty placeholder; no control, PID/PD, motor, actuator, or joint implementation. |
+| `src/communication/` | Empty placeholder; no transport or protocol implementation. |
+| `test/` | Host-side checks for deadline progression and calibration counter behavior. |
+| `analyze_imu.py` | Reads captured diagnostic text/CSV, reports timing and IMU statistics, and optionally generates plots. |
 
-Arduino entry point. It starts serial communication, creates the global `Application` object, calls `Application::begin()` from `setup()`, and calls `Application::update()` from `loop()`.
-
-### `app/`
-
-`Application` owns one `IMUManager` and one `Diagnostics` object. After successful IMU initialization, it initializes diagnostics. During each successful update it retrieves corrected IMU data and, when diagnostics are enabled, passes it once to the passive CSV observer.
-
-### `sensors/`
-
-`IMUManager` coordinates the concrete IMU driver and calibration module. It is the application's current access point for processed IMU data.
-
-### `drivers/imu/`
-
-Contains the ICM42688-specific driver and the `IIMUDriver` interface.
-
-`ICM42688Driver` performs I2C setup, sensor initialization/configuration, raw-data acquisition, conversion through the external ICM42688 library, gyro filtering, roll/pitch calculation, and timestamping. It directly depends on Arduino `Wire` and the ICM42688 library.
-
-`IIMUDriver` defines `begin()`, `update()`, and `getData()`. It is implemented by `ICM42688Driver`, but `IMUManager` currently owns `ICM42688Driver` directly rather than depending on the interface type.
-
-### `calibration/`
-
-`IMUCalibration` first accepts 50 successful warm-up samples without accumulating offsets, then averages 500 successful samples for roll, pitch, and filtered gyro values. After calibration, it subtracts these offsets from later samples. It operates on `IMUData` and has no direct sensor-library dependency.
-
-### `filters/`
-
-Contains `LowPassFilter`, a first-order fixed-alpha filter. Three instances belong to `ICM42688Driver` and filter gyro X/Y/Z values before calibration. The filter is not currently a standalone post-calibration pipeline stage.
-
-### `diagnostics/`
-
-Contains the standardized IMU CSV emitter. `Application` calls it once per successful update after `IMUManager`; it prints no row for an invalid sample. The compile-time `IMU_DIAGNOSTICS_ENABLED` macro controls this output.
-
-### `common/`
-
-Contains shared configuration and data types:
-
-- `config.h`: serial, I2C, pin, and IMU-address constants.
-- `types.h`: `IMUData` shared data structure.
-- `math_utils.h`: empty placeholder.
-
-### `platform/`
-
-Currently contains only `PlatformMillis()`, which wraps Arduino `millis()`. The `esp32/` and `stm32/` directories are present but empty placeholders; they do not yet provide target-specific implementations.
-
-### `communication/` and `control/`
-
-Both directories are intentionally empty placeholders. No communication protocol, motor control, PID, ADRC, or manipulator-control implementation exists yet.
-
-## Current Include and Ownership Relationships
+## Active Ownership Path
 
 ```text
-main.cpp
-  -> Application
-      -> IMUManager
-          -> ICM42688Driver : IIMUDriver
-              -> LowPassFilter x3
-              -> Arduino Wire + ICM42688 library
-          -> IMUCalibration
-      -> Diagnostics
+Application
+  ├── IMUManager
+  │   ├── ICM42688Driver : IIMUDriver
+  │   │   └── LowPassFilter x3
+  │   └── IMUCalibration
+  └── Diagnostics (called only when compile-time enabled)
 ```
 
-`IMUCalibration` and `Diagnostics` both use the shared `IMUData` definition. `PlatformMillis()` is used by the IMU driver for timestamps.
-
-## Current Runtime Flow
-
-This diagram describes the code that executes today, not the target architecture.
-
-```text
-ICM42688 sensor
-  -> ICM42688Driver
-      -> raw and converted measurements
-      -> gyro low-pass filtering
-      -> accelerometer roll/pitch calculation
-      -> microsecond acquisition timestamp / dt
-  -> IMUManager
-  -> IMUCalibration
-  -> Application
-  -> corrected IMUData
-  -> Diagnostics (one CSV row per valid sample when enabled)
-```
-
-## Placeholder Directories and Future Scope
-
-`communication/`, `control/`, `platform/esp32/`, and `platform/stm32/` document intended areas of future work only. Their presence must not be interpreted as implemented communication, control, ESP32 platform adaptation, or STM32 support.
+The folder names reserve future areas but do not imply that control, communication, ESP32 abstraction, STM32 support, or sensor fusion is implemented.
