@@ -1,0 +1,37 @@
+# PlatformIO build files
+.pio/
+
+# VS Code generated files
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local environment and secrets
+.env
+.env.*
+*.pem
+*.key
+secrets.h
+credentials.h
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Raw IMU captures and generated analysis
+imu_log*.csv
+imu_analysis/
+imu_50hz_test_clean.csv
+imu_50hz_test.csv
+imu_log.csv
+
+# Temporary files
+*.tmp
+*.bak
+*.log
