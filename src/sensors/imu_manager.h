@@ -2,10 +2,13 @@
 
 #include "drivers/imu/imu_driver.h"
 #include "calibration/imu_calibration.h"
+#include "filters/complementary_filter.h"
 
 class IMUManager
 {
 public:
+    IMUManager();
+
     bool begin();
     bool update();
 
@@ -14,5 +17,6 @@ public:
 private:
     ICM42688Driver driver_;
     IMUCalibration calibration_;
+    OrientationEstimator orientationEstimator_;
     IMUData data_;
 };

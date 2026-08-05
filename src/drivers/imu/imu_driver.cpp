@@ -1,6 +1,5 @@
 #include "imu_driver.h"
 
-#include <math.h>
 #include <Wire.h>
 #include <ICM42688.h>
 
@@ -15,21 +14,9 @@ ICM42688 imu(
     IMU_SCL_PIN
 );
 
-
-// Constructor
-ICM42688Driver::ICM42688Driver()
-:
-gyroXFilter(0.1f),
-gyroYFilter(0.1f),
-gyroZFilter(0.1f)
-{
-
-}
-
-
 bool ICM42688Driver::begin()
 {
-    data_ = IMUData{};
+    data_ = IMURawMeasurements{};
     lastTimestampUs_ = 0;
 
     Wire.begin(IMU_SDA_PIN, IMU_SCL_PIN);
@@ -66,7 +53,7 @@ bool ICM42688Driver::update()
     // getAGT() has acquired the complete sensor sample at this point.
     const uint64_t timestampUs = PlatformMicros();
 
-    // Raw, unfiltered and uncalibrated ADC counts.
+    // Raw, uncalibrated ADC counts.
     data_.rawAccelX = imu.rawAccX();
     data_.rawAccelY = imu.rawAccY();
     data_.rawAccelZ = imu.rawAccZ();
@@ -77,43 +64,16 @@ bool ICM42688Driver::update()
 
 
 
-    // Accelerometer
+    // Library-converted, uncalibrated physical measurements.
     data_.accelXG = imu.accX();
     data_.accelYG = imu.accY();
     data_.accelZG = imu.accZ();
 
 
 
-    // Gyro raw DPS
-    float gx = imu.gyrX();
-    float gy = imu.gyrY();
-    float gz = imu.gyrZ();
-
-
-    // Gyro filtered
-    data_.gyroXDegS = gyroXFilter.update(gx);
-    data_.gyroYDegS = gyroYFilter.update(gy);
-    data_.gyroZDegS = gyroZFilter.update(gz);
-
-
-
-    // Accelerometer angle
-    data_.rollDeg =
-        atan2(data_.accelYG, data_.accelZG)
-        * 180.0f / PI;
-
-
-    data_.pitchDeg =
-        atan2(
-            -data_.accelXG,
-            sqrt(
-                data_.accelYG * data_.accelYG +
-                data_.accelZG * data_.accelZG
-            )
-        )
-        * 180.0f / PI;
-
-
+    data_.gyroXDegS = imu.gyrX();
+    data_.gyroYDegS = imu.gyrY();
+    data_.gyroZDegS = imu.gyrZ();
 
     data_.timestampUs = timestampUs;
     data_.dtSeconds = 0.0f;
@@ -132,7 +92,7 @@ bool ICM42688Driver::update()
 
 
 
-const IMUData& ICM42688Driver::getData() const
+const IMURawMeasurements& ICM42688Driver::getData() const
 {
     return data_;
 }

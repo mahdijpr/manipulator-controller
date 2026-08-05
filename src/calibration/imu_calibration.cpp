@@ -4,19 +4,15 @@
 
 bool IMUCalibration::begin()
 {
-    data_ = IMUData{};
+    data_ = IMUCalibratedMeasurements{};
     calibrated_ = false;
     warmupSampleCounter_ = 0;
     sampleCounter_ = 0;
 
-    rollSum_ = 0.0f;
-    pitchSum_ = 0.0f;
     gxSum_ = 0.0f;
     gySum_ = 0.0f;
     gzSum_ = 0.0f;
 
-    rollOffset_ = 0.0f;
-    pitchOffset_ = 0.0f;
     gxOffset_ = 0.0f;
     gyOffset_ = 0.0f;
     gzOffset_ = 0.0f;
@@ -24,10 +20,16 @@ bool IMUCalibration::begin()
     return true;
 }
 
-bool IMUCalibration::update(const IMUData& input)
+bool IMUCalibration::update(const IMURawMeasurements& input)
 {
-    data_ = input;
-    data_.calibrated = calibrated_;
+    data_.accelXG = input.accelXG;
+    data_.accelYG = input.accelYG;
+    data_.accelZG = input.accelZG;
+    data_.gyroXDegS = input.gyroXDegS;
+    data_.gyroYDegS = input.gyroYDegS;
+    data_.gyroZDegS = input.gyroZDegS;
+    data_.calibrationComplete = calibrated_;
+    data_.valid = input.valid;
 
     // IMUManager normally calls this only after a successful driver update,
     // but preserve the successful-sample counter contract defensively.
@@ -44,8 +46,6 @@ bool IMUCalibration::update(const IMUData& input)
             return true;
         }
 
-        rollSum_ += input.rollDeg;
-        pitchSum_ += input.pitchDeg;
         gxSum_ += input.gyroXDegS;
         gySum_ += input.gyroYDegS;
         gzSum_ += input.gyroZDegS;
@@ -54,18 +54,17 @@ bool IMUCalibration::update(const IMUData& input)
         if (sampleCounter_ < IMU_CALIBRATION_SAMPLE_COUNT)
             return true;
 
-        rollOffset_ = rollSum_ / IMU_CALIBRATION_SAMPLE_COUNT;
-        pitchOffset_ = pitchSum_ / IMU_CALIBRATION_SAMPLE_COUNT;
         gxOffset_ = gxSum_ / IMU_CALIBRATION_SAMPLE_COUNT;
         gyOffset_ = gySum_ / IMU_CALIBRATION_SAMPLE_COUNT;
         gzOffset_ = gzSum_ / IMU_CALIBRATION_SAMPLE_COUNT;
 
         calibrated_ = true;
-        data_.calibrated = true;
+        data_.calibrationComplete = true;
     }
 
-    data_.rollDeg -= rollOffset_;
-    data_.pitchDeg -= pitchOffset_;
+    // With an arbitrary stationary startup pose, a single mean accelerometer
+    // vector includes gravity and cannot distinguish it from sensor bias.
+    // Preserve that vector for gravity-referenced Roll/Pitch estimation.
     data_.gyroXDegS -= gxOffset_;
     data_.gyroYDegS -= gyOffset_;
     data_.gyroZDegS -= gzOffset_;
@@ -73,7 +72,7 @@ bool IMUCalibration::update(const IMUData& input)
     return true;
 }
 
-const IMUData& IMUCalibration::getData() const
+const IMUCalibratedMeasurements& IMUCalibration::getData() const
 {
     return data_;
 }
